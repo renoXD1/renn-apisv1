@@ -1,0 +1,128 @@
+Halo Ai Tolong Ubah Ini Dari Javascript Ke Python Agar Bisa Aku Pakai Untuk Endpoint Fast Api Aku 
+
+[Scra]
+Gunakan 
+METHOD : 
+Tags : 
+Nama Endpoint : 
+komentar kayak // ## Jangan Ada !!
+
+Oke! Kita bisa ubah kode JavaScript itu menjadi endpoint FastAPI Python dengan UploadFile untuk menerima file dan menggunakan httpx.AsyncClient untuk request ke API Pixelcut.
+
+Berikut versi Python (removebg.py) yang siap di-include di main.py:
+
+from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
+import httpx, io
+
+from fastapi import APIRouter
+
+router = APIRouter(tags=["tools"])
+
+
+@router.post("/removebg")
+async def remove_background(image: UploadFile = File(...)):
+    """
+    Endpoint untuk menghapus background image menggunakan Pixelcut API
+    """
+    url = "https://api2.pixelcut.app/image/matte/v1"
+
+    try:
+        # Baca file upload
+        img_bytes = await image.read()
+
+        # Siapkan multipart/form-data
+        files = {
+            "format": (None, "png"),
+            "model": (None, "v1"),
+            "image": (image.filename, img_bytes, image.content_type)
+        }
+
+        headers = {
+            "x-client-version": "web"
+        }
+
+        # Kirim request ke Pixelcut API
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(url, files=files, headers=headers)
+            response.raise_for_status()
+            # API mengembalikan image langsung sebagai content
+            result_bytes = response.content
+
+            # Stream hasil image kembali ke client
+            return StreamingResponse(io.BytesIO(result_bytes), media_type="image/png")
+
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"RemoveBG API error: {e.response.text}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+---
+
+Penjelasan:
+
+1. APIRouter
+
+Variabel router supaya bisa di-include di main.py.
+
+Tag "tools" untuk Swagger UI.
+
+
+
+2. UploadFile
+
+Endpoint menerima file image lewat image: UploadFile = File(...).
+
+
+
+3. Multipart/form-data
+
+Python httpx menggunakan dictionary {name: (filename, content, content_type)} untuk file dan (None, value) untuk field biasa.
+
+
+
+4. StreamingResponse
+
+Mengembalikan hasil image langsung ke client tanpa menyimpan di server
+
+Contoh Hasil Simple
+
+from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
+import httpx
+import io
+
+router = APIRouter(tags=["tools"])
+@router.post("/upscale")
+async def upscale_image(image: UploadFile = File(...)):
+    url = "https://api2.pixelcut.app/image/upscale/v1"
+
+    img_bytes = await image.read()
+    files = {
+        "image": (image.filename, img_bytes, image.content_type),
+        "scale": (None, "2")
+    }
+    headers = {
+        "accept": "application/json",
+        "x-client-version": "web"
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            # Kirim ke API Pixelcut
+            response = await client.post(url, files=files, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            result_url = data.get("result_url")
+
+            if not result_url:
+                raise HTTPException(status_code=500, detail="No result URL from API")
+            img_response = await client.get(result_url)
+            img_response.raise_for_status()
+            return StreamingResponse(io.BytesIO(img_response.content), media_type="image/jpeg")
+
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Upscale API error: {e.response.text}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
